@@ -26,6 +26,32 @@ class foreman_proxy_content::reverse_proxy (
 
   Class['certs', 'certs::ca', 'certs::apache', 'certs::foreman_proxy'] ~> Class['apache::service']
 
+  $machine_certificate_path = "${apache::httpd_dir}/tls"
+
+  file { $machine_certificate_path:
+    ensure => directory,
+    owner  => $apache::user,
+    group  => $apache::group,
+  }
+
+  file { "${machine_certificate_path}/reverse-proxy.crt":
+    ensure => file,
+    source => $certs::foreman_proxy::foreman_ssl_cert,
+    owner  => $apache::user,
+    group  => $apache::group,
+    mode   => '0400',
+    require => Class['certs::foreman_proxy'],
+  }
+
+  file { "${machine_certificate_path}/reverse-proxy.key":
+    ensure => file,
+    source => $certs::foreman_proxy::foreman_ssl_key,
+    owner  => $apache::user,
+    group  => $apache::group,
+    mode   => '0400',
+    require => Class['certs::foreman_proxy'],
+  }
+
   apache::vhost { 'katello-reverse-proxy':
     servername             => $certs::apache::hostname,
     aliases                => $certs::apache::cname,
@@ -36,7 +62,6 @@ class foreman_proxy_content::reverse_proxy (
     ssl                    => true,
     ssl_proxyengine        => true,
     ssl_proxy_ca_cert      => $certs::ca_cert,
-    ssl_proxy_machine_cert => $certs::foreman_proxy::foreman_proxy_ssl_client_bundle,
     ssl_cert               => $certs::apache::apache_cert,
     ssl_key                => $certs::apache::apache_key,
     ssl_chain              => $certs::katello_server_ca_cert,
@@ -45,6 +70,7 @@ class foreman_proxy_content::reverse_proxy (
     ssl_verify_depth       => 10,
     ssl_protocol           => $ssl_protocol,
     request_headers        => ['set X_RHSM_SSL_CLIENT_CERT "%{SSL_CLIENT_CERT}s"'],
+    custom_fragment        => "SSLProxyMachineCertificatePath ${machine_certificate_path}",
     proxy_pass             => [
       {
         'path'         => $path,
